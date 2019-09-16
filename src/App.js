@@ -2,90 +2,72 @@ import React from 'react';
 import './App.css';
 import { setTimeout } from 'timers';
 
-const statImportances = {
-  "Goals": 0.35,
-  "Shots on Goal": 0.25,
-  "Total Shots": 0.1,
-  "Corner Kicks": 0.2,
-  "Yellow Cards": 0.1,
-}
-const timeImportance = 100 - statImportances['Goals'];
+const testFlag = true;
 
-const maxStatDifferences = {
-  "Goals": 3,
-  "Shots on Goal": 5,
-  "Total Shots": 10,
-  "Corner Kicks": 10,
-  "Ball Possession": 15,
-  "Yellow Cards": -5,
-  "Red Cards": -2
+// const updateTime = 300000;
+const updateTime = 60 * 1000;
+const statSettings = {
+  "Goals": {
+    importance: 0.25,
+    maxDifference: 2
+  },
+  "Shots on Goal": {
+    importance: 0.35,
+    maxDifference: 4
+  },
+  "Total Shots": {
+    importance: 0.05,
+    maxDifference: 5
+  },
+  "Corner Kicks": {
+    importance: 0.25,
+    maxDifference: 7
+  },
+  "Ball Possession": {
+    importance: null,
+    maxDifference: 15
+  },
+  "Offsides": {
+    importance: null,
+    maxDifference: null
+  },
+  "Fouls": {
+    importance: null,
+    maxDifference: null
+  },
+  "Yellow Cards": {
+    importance: 0.1,
+    maxDifference: -5
+  },
+  "Red Cards": {
+    importance: null,
+    maxDifference: -2
+  }
 };
+const timeImportance = 1 - statSettings['Goals'].importance;
+const importantStatCount = Object.values(statSettings).filter((setting => setting.importance)).length - 1;
 
 class App extends React.Component {
   constructor(props) {
     super(props);
-    // this.state = { Time: 1 };
-    this.state = {
-      "Time": 1,
-      "Statistics": {
-        "Shots on Goal": {
-          "home": "3",
-          "away": "3"
-      },
-      "Shots off Goal": {
-          "home": "9",
-          "away": "5"
-      },
-      "Total Shots": {
-          "home": "10",
-          "away": "8"
-      },
-      "Fouls": {
-          "home": "20",
-          "away": "10"
-      },
-      "Corner Kicks": {
-          "home": "6",
-          "away": "2"
-      },
-      "Offsides": {
-          "home": "2",
-          "away": "0"
-      },
-      "Ball Possession": {
-          "home": "53%",
-          "away": "47%"
-      },
-      "Yellow Cards": {
-          "home": "5",
-          "away": "4"
-      },
-      "Red Cards": {
-          "home": "0",
-          "away": "1"
-      },
-      "Goalkeeper Saves": {
-          "home": "3",
-          "away": "1"
-      },
-      "Total passes": {
-          "home": null,
-          "away": null
-      },
-      "Passes accurate": {
-          "home": null,
-          "away": null
-      }
-      }
+    this.state = { 
+      gameTime: 0,
+      statistics: null
     };
-    setInterval(() => {
-      if (this.state['Time'] < 90) {
-        let state = Object.assign({}, this.state);
-        state['Time'] += 2;
-        this.setState(state);
-      }
-    }, 2000);
-    return;
+
+    if (testFlag) {
+      const intervalID = setInterval(() => {
+        if (this.state.gameTime > 90) {
+          clearInterval(intervalID);
+        } else {
+          this.setState({
+            gameTime: this.state.gameTime + 2,
+            statistics: testStats
+          });
+        }
+      }, 2000);
+      return;
+    }
 
     let intervalId = setTimeout(() => {
       fetch('https://api-football-v1.p.rapidapi.com/v2/statistics/fixture/154352', {
@@ -96,50 +78,25 @@ class App extends React.Component {
         }
       })
       .then(response => response.json().then(data => {
-        if (this.state['Time'] > 90) {
+        if (this.state.gameTime > 90) {
           clearInterval(intervalId);
         } else {
-          let state = {
-            'Time': this.state['Time'] + 5,
-            'Statistics': {...data.api.statistics}
-          };
-          console.log(state);
-          console.log(data);
-          
-          
-          this.setState(state);
+          this.setState({
+            gameTime: this.state.gameTime + (updateTime / 60000),
+            statistics: {...data.api.statistics}
+          });
         }
       }))
-    }, 1000);
+    }, updateTime);
   }
 
   render() {
-    if (!this.state.Statistics) return null;
-    console.log(this.state.Statistics);
+    if (!this.state.statistics) return null;
     
-    let stats = {
-      'Goals': {
-        home: this.state.Statistics['Shots on Goal'].home - this.state.Statistics['Goalkeeper Saves'].away,
-        away: this.state.Statistics['Shots on Goal'].away - this.state.Statistics['Goalkeeper Saves'].home
-      },
-      ...this.state.Statistics
-    };
-    console.log('stats: ', this.state.Statistics);
-    console.log('stats: ', stats);
-    delete stats['Total passes'];
-    delete stats['Passes accurate'];
-    delete stats['Goalkeeper Saves'];
-    delete stats['Shots off Goal'];
-    delete stats['Blocked Shots'];
-    delete stats['Shots insidebox'];
-    delete stats['Shots outsidebox'];
-    delete stats['Passes %'];
-    let time = this.state['Time'];
-    for (let statName in stats) {
-      stats[statName].homePercentage = 
-        calculateScoreAdvantagePercentage(stats[statName].home, stats[statName].away, maxStatDifferences[statName]);
-    }
-    console.log('stats: ', stats);
+    let statistics = createStatsWithGoals(this.state.statistics);    
+    deleteUnwantedStats(statistics);
+    addAdvantageStatistics(statistics);
+    // console.log('statistics to render', statistics);
     
     return (
       <div id="main-container" className="container-fluid">
@@ -153,19 +110,18 @@ class App extends React.Component {
               <div className="col border">Stats</div>
             </div>
             <StatRow 
-                key="Winnder"
+                key="win"
                 statInfo="Win chance"
-                hostPercentage={calculateWinnerPercentage(stats, time)}
+                hostPercentage={calculateWinAdvantage(statistics, this.state.gameTime)}
               />
-            {Object.entries(stats).map(([statName, statValue]) => {
-              if (statName === 'Fouls') statValue.homePercentage = 100 - statValue.homePercentage;
-
+            {Object.entries(statistics).map(([statName, stat]) => {
+              if (statName === 'Fouls') stat.homeAdvantage = 100 - stat.homeAdvantage;
               return <StatRow 
                 key={statName}
                 statInfo={statName}
-                hostScore={statValue.home}
-                guestScore={statValue.away}
-                hostPercentage={statValue.homePercentage}
+                hostScore={stat.home}
+                guestScore={stat.away}
+                hostPercentage={stat.homeAdvantage}
               />
             })}
           </div>
@@ -174,7 +130,7 @@ class App extends React.Component {
             teamLogoUrl="./assets/legia-logo.png"
           />
         </div>
-        <p>Time: {time} mins</p>
+        <p>Time: {this.state.gameTime} mins</p>
         <br></br>
         <input type="number" onKeyDown={(e) => { this.updateTimer(e) }}></input>
       </div>
@@ -182,9 +138,7 @@ class App extends React.Component {
   }
 
   updateTimer(e) {
-    this.state['Time'] = parseInt(e.target.value);
-    console.log(this.state['Time']);
-    
+    this.state.gameTime = parseInt(e.target.value);
   }
 }
 
@@ -219,9 +173,38 @@ function TeamInfoColumn(props) {
   );
 }
 
-function calculateScoreAdvantagePercentage(homeScore, awayScore, maxDifference) {
+function createStatsWithGoals(statistics) {
+  return {
+    'Goals': {
+      home: statistics['Shots on Goal'].home - statistics['Goalkeeper Saves'].away,
+      away: statistics['Shots on Goal'].away - statistics['Goalkeeper Saves'].home
+    },
+    ...statistics
+  };
+}
+
+function deleteUnwantedStats(statistics) {
+  delete statistics['Total passes'];
+  delete statistics['Passes accurate'];
+  delete statistics['Goalkeeper Saves'];
+  delete statistics['Shots off Goal'];
+  delete statistics['Blocked Shots'];
+  delete statistics['Shots insidebox'];
+  delete statistics['Shots outsidebox'];
+  delete statistics['Passes %'];
+}
+
+function addAdvantageStatistics(statistics) {  
+  for (const [statName, stat] of Object.entries(statistics)) {
+    statistics[statName].homeAdvantage = 
+      calculateStatisticAdvantage(stat.home, stat.away, statSettings[statName].maxDifference);
+  }
+}
+
+function calculateStatisticAdvantage(homeScore, awayScore, maxDifference) {
   homeScore = parseInt(homeScore, 10);
   awayScore = parseInt(awayScore, 10);
+  if (homeScore === 0 && awayScore === 0) return 50;
   if (!maxDifference) return Math.floor((homeScore / (homeScore + awayScore)) * 100);
 
   const diff = homeScore - awayScore;
@@ -230,19 +213,155 @@ function calculateScoreAdvantagePercentage(homeScore, awayScore, maxDifference) 
   return Math.floor(50 + advantage);
 }
 
-function calculateWinnerPercentage(stats, time) {
-  let winnerPercentage = 0;
-  for (let statName in statImportances) {
-    if (statName === 'Goals') {
-      // console.log('goal importance: ', statImportances[statName] + (timeImportance * (time / 90)));
-      
-      winnerPercentage += stats[statName].homePercentage * (statImportances[statName] + (timeImportance * (time / 90)));
-    } else {
-      // console.log('other importance: ', statImportances[statName] - (timeImportance * (time / 90)) / Object.keys(statImportances).length);
-      winnerPercentage += stats[statName].homePercentage * Math.abs((statImportances[statName] - (timeImportance * (time / 90)) / Object.keys(statImportances).length));
-    }
+function calculateWinAdvantage(statistics, gameTime) {
+  let winnerAdvantage = 0;
+
+  const minorStatImportances = timeImportance;
+
+  for (const [statName, setting] of Object.entries(statSettings)) {    
+    if (!setting.importance) continue;    
+
+    const stat = statistics[statName];
+    const statImportance = setting.importance;    
+
+    const timeFraction = gameTime < 65 ? (gameTime / 150) : (gameTime / 90);
+
+    const timeFactor = timeImportance * ((timeFraction) * (statName === 'Goals' ? 1 : -(statImportance / timeImportance)));
+    const finalImportance = statImportance + timeFactor;
+    winnerAdvantage += stat.homeAdvantage * (finalImportance < 0 ? 0 : finalImportance);
+
+    console.log(statName, statImportance, timeFactor, winnerAdvantage);
   }
-  return winnerPercentage > 100 ? 100 : Math.floor(winnerPercentage);
+
+  if (gameTime >= 75 && statistics['Goals'].home !== statistics['Goals'].away) {
+    const timeLeft = gameTime - 75;
+    const homeWinning = statistics['Goals'].home > statistics['Goals'].away;
+    const chanceLeft = homeWinning ? 100 - winnerAdvantage : -winnerAdvantage;
+    winnerAdvantage += chanceLeft * (timeLeft / 15);
+  }
+
+  return winnerAdvantage > 100 ? 
+    100 : winnerAdvantage < 0 ? 
+    0 : Math.floor(winnerAdvantage);
 }
 
 export default App;
+
+
+const testStats = {
+  "Shots on Goal": {
+    "home": "1",
+    "away": "4"
+  },
+  "Shots off Goal": {
+      "home": "9",
+      "away": "5"
+  },
+  "Total Shots": {
+      "home": "10",
+      "away": "8"
+  },
+  "Blocked Shots": {
+      "home": null,
+      "away": null
+  },
+  "Shots insidebox": {
+      "home": null,
+      "away": null
+  },
+  "Shots outsidebox": {
+      "home": null,
+      "away": null
+  },
+  "Fouls": {
+      "home": "20",
+      "away": "10"
+  },
+  "Corner Kicks": {
+      "home": "0",
+      "away": "3"
+  },
+  "Offsides": {
+      "home": "2",
+      "away": "0"
+  },
+  "Ball Possession": {
+      "home": "53%",
+      "away": "47%"
+  },
+  "Yellow Cards": {
+      "home": "5",
+      "away": "4"
+  },
+  "Red Cards": {
+      "home": "0",
+      "away": "1"
+  },
+  "Goalkeeper Saves": {
+      "home": "4",
+      "away": "1"
+  },
+  "Total passes": {
+      "home": null,
+      "away": null
+  },
+  "Passes accurate": {
+      "home": null,
+      "away": null
+  },
+  "Passes %": {
+      "home": null,
+      "away": null
+  }
+};
+
+const testInitialStats = {
+  "Shots on Goal": {
+    "home": "0",
+    "away": "0"
+  },
+  "Shots off Goal": {
+      "home": "0",
+      "away": "0"
+  },
+  "Total Shots": {
+      "home": "0",
+      "away": "0"
+  },
+  "Fouls": {
+      "home": "0",
+      "away": "0"
+  },
+  "Corner Kicks": {
+      "home": "0",
+      "away": "0"
+  },
+  "Offsides": {
+      "home": "0",
+      "away": "0"
+  },
+  "Ball Possession": {
+      "home": "50%",
+      "away": "50%"
+  },
+  "Yellow Cards": {
+      "home": "0",
+      "away": "0"
+  },
+  "Red Cards": {
+      "home": "0",
+      "away": "0"
+  },
+  "Goalkeeper Saves": {
+      "home": "0",
+      "away": "0"
+  },
+  "Total passes": {
+      "home": null,
+      "away": null
+  },
+  "Passes accurate": {
+      "home": null,
+      "away": null
+  }
+};
