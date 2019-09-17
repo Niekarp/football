@@ -37,6 +37,10 @@ img {
   height: 450px;
 }
 
+#winner-stat-row {
+  height: 50px;
+}
+
 .stat-row {
   height: 25px;
 }

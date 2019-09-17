@@ -109,19 +109,23 @@ class App extends React.Component {
             <div className="row">
               <div className="col border">Stats</div>
             </div>
-            <StatRow 
-                key="win"
-                statInfo="Win chance"
-                hostPercentage={calculateWinAdvantage(statistics, this.state.gameTime)}
-              />
+            <WinnerStatBar
+              statName="Win chance"
+              homeAdvantage={calculateWinAdvantage(statistics, this.state.gameTime)}
+            />
+            <div className="row">
+              <div className="col-12 p-0">
+                <hr className="bg-white"/>
+              </div>
+            </div>
             {Object.entries(statistics).map(([statName, stat]) => {
               if (statName === 'Fouls') stat.homeAdvantage = 100 - stat.homeAdvantage;
               return <StatRow 
                 key={statName}
-                statInfo={statName}
+                statName={statName}
                 hostScore={stat.home}
                 guestScore={stat.away}
-                hostPercentage={stat.homeAdvantage}
+                homeAdvantage={stat.homeAdvantage}
               />
             })}
           </div>
@@ -147,13 +151,36 @@ function StatRow(props) {
     <div className="row mb-2 stat-row">
       <div className="col-3">{props.hostScore}</div>
       <div className="col-6">
-        <div className="row h-100">
-          <div className="p-0 bg-danger stat-bar" style={{width: props.hostPercentage + '%'}}></div>
-          <div className="col p-0 bg-success"></div>
-          <div className="stat-row-info">{props.statInfo + ` (${props.hostPercentage}%)`}</div>
-        </div>
+        <StatBar
+          statName={props.statName}
+          homeAdvantage={props.homeAdvantage}
+        />
       </div>
       <div className="col-3">{props.guestScore}</div>
+    </div>
+  );
+}
+
+function StatBar(props) {
+  return (
+    <div className="row h-100">
+      <div className="p-0 bg-danger stat-bar" style={{width: props.homeAdvantage + '%'}}></div>
+      <div className="col p-0 bg-success"></div>
+      <div className="stat-row-info">{props.statName + ` (${props.homeAdvantage}%)`}</div>
+    </div>
+  );
+}
+
+function WinnerStatBar(props) {
+  return (
+    <div id="winner-stat-row" className="row">
+      <div className="col-12">
+        <div className="row h-100">
+          <div className="p-0 bg-danger stat-bar" style={{width: props.homeAdvantage + '%'}}></div>
+          <div className="col p-0 bg-success"></div>
+          <div className="stat-row-info" style={{lineHeight: 3}}>{props.statName + ` (${props.homeAdvantage}%)`}</div>
+        </div>
+      </div>
     </div>
   );
 }
