@@ -1,4 +1,4 @@
-# Football match live preview
+# Football match live info
 
 Web application displaying football match statistics and predicting winning chances of each team.
 
