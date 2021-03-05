@@ -2,10 +2,19 @@ import React from 'react';
 import './App.css';
 import { setTimeout } from 'timers';
 
-const testFlag = true;
+// fetch('https://api-football-v1.p.rapidapi.com/v2/fixtures/date/2019-10-19', {
+//   headers: {
+//     'X-RapidAPI-Key': '995b5d35bfmsh718e59d1d347fe3p13bf54jsndcce2fdf0ff8',
+//     'Accept': 'application/json'
+//   }
+// }).then();
 
-// const updateTime = 300000;
-const updateTime = 60 * 1000;
+const testFlag = false;
+
+var updateRunning = false;
+
+const updateTime = 180000;
+// const updateTime = 60 * 1000;
 const statSettings = {
   "Goals": {
     importance: 0.25,
@@ -52,26 +61,45 @@ class App extends React.Component {
     super(props);
     this.state = { 
       gameTime: 0,
-      statistics: null
+      statistics: testInitialStats
     };
 
     if (testFlag) {
+      let goal = false;
       const intervalID = setInterval(() => {
         if (this.state.gameTime > 90) {
           clearInterval(intervalID);
         } else {
+          if (!updateRunning) return;
+
+          if (this.state.gameTime >= 70 && !goal) {
+            let zxc = parseInt(testStats['Shots on Goal'].away);
+            testStats['Shots on Goal'].away = zxc + 1;
+            goal = true;
+          }
+
+          let stats = testStats;
+          debugger
+          for (let statName in stats) {
+            if (stats.hasOwnProperty(statName)) {
+              if (stats[statName].home === null) stats[statName].home = 0;
+              if (stats[statName].away === null) stats[statName].away = 0;
+            }
+          }
+
           this.setState({
-            gameTime: this.state.gameTime + 2,
-            statistics: testStats
+            gameTime: this.state.gameTime + 1,
+            statistics: stats
           });
         }
-      }, 2000);
+      }, 1000);
       return;
     }
 
-    let intervalId = setTimeout(() => {
-      fetch('https://api-football-v1.p.rapidapi.com/v2/statistics/fixture/154352', {
-        
+    let intervalId = setInterval(() => {
+      if (!updateRunning) return;
+
+      fetch('https://api-football-v1.p.rapidapi.com/v2/statistics/fixture/154397', {
         headers: {
           'X-RapidAPI-Key': '995b5d35bfmsh718e59d1d347fe3p13bf54jsndcce2fdf0ff8',
           'Accept': 'application/json'
@@ -81,9 +109,20 @@ class App extends React.Component {
         if (this.state.gameTime > 90) {
           clearInterval(intervalId);
         } else {
+          let stats = data.api.statistics;
+
+          for (let statName in stats) {
+            if (stats.hasOwnProperty(statName)) {
+              if (stats[statName].home === null) stats[statName].home = 0;
+              if (stats[statName].away === null) stats[statName].away = 0;
+            }
+          }
+
+          console.log(JSON.stringify(stats));
+
           this.setState({
             gameTime: this.state.gameTime + (updateTime / 60000),
-            statistics: {...data.api.statistics}
+            statistics: {...stats}
           });
         }
       }))
@@ -91,27 +130,30 @@ class App extends React.Component {
   }
 
   render() {
-    if (!this.state.statistics) return null;
-    
+    if (!this.state.statistics || this.state.statistics.length === 0) return null;
+
     let statistics = createStatsWithGoals(this.state.statistics);    
     deleteUnwantedStats(statistics);
     addAdvantageStatistics(statistics);
     // console.log('statistics to render', statistics);
+
+    const winAdvantage = calculateWinAdvantage(statistics, this.state.gameTime);
     
     return (
       <div id="main-container" className="container-fluid">
         <div className="row">
           <TeamInfoColumn
             teamName="Jagiellonia"
-            teamLogoUrl="./assets/jagiellonia-logo.png"
+            teamLogoUrl="./assets/home-logo.png"
+            winAdvantage={winAdvantage}
           />
-          <div className="col-6 border">
+          <div className="col-6 border" style={{paddingBottom: '9px'}}>
             <div className="row">
               <div className="col border">Stats</div>
             </div>
             <WinnerStatBar
               statName="Win chance"
-              homeAdvantage={calculateWinAdvantage(statistics, this.state.gameTime)}
+              homeAdvantage={winAdvantage}
             />
             <div className="row">
               <div className="col-12 p-0">
@@ -120,22 +162,41 @@ class App extends React.Component {
             </div>
             {Object.entries(statistics).map(([statName, stat]) => {
               if (statName === 'Fouls') stat.homeAdvantage = 100 - stat.homeAdvantage;
-              return <StatRow 
+              if (statName === 'Red Cards') return (<StatRow 
                 key={statName}
                 statName={statName}
                 hostScore={stat.home}
                 guestScore={stat.away}
                 homeAdvantage={stat.homeAdvantage}
-              />
+              />);
+
+              return [ <StatRow 
+                key={statName}
+                statName={statName}
+                hostScore={stat.home}
+                guestScore={stat.away}
+                homeAdvantage={stat.homeAdvantage}
+              />,
+              <hr style={{margin: '5px', backgroundColor: '#61dafb'}}/>
+              ]
             })}
           </div>
           <TeamInfoColumn
-            teamName="Legia"
-            teamLogoUrl="./assets/legia-logo.png"
+            teamName="Cracovia"
+            teamLogoUrl="./assets/away-logo.png"
+            winAdvantage={100 - winAdvantage}
           />
         </div>
-        <p>Time: {this.state.gameTime} mins</p>
+        <div className="progress" style={{marginLeft: '-15px', marginRight: '-15px'}}>
+          <div className="progress-bar" style={{width: `${this.state.gameTime / 90 * 100}%`}}></div>
+        </div>
+        <div>Time: {this.state.gameTime} mins</div>
+        <div>(next update on {this.state.gameTime + (updateTime / 60000)} min)</div>
         <br></br>
+        <button type="button" className="btn btn-light" data-toggle="button" aria-pressed="false" autoComplete="off" onClick={onUpdateButtonClick}>
+          Update On/Off
+        </button>
+        <br></br><br></br>
         <input type="number" onKeyDown={(e) => { this.updateTimer(e) }}></input>
       </div>
     );
@@ -148,7 +209,7 @@ class App extends React.Component {
 
 function StatRow(props) {
   return (
-    <div className="row mb-2 stat-row">
+    <div className="row stat-row">
       <div className="col-3">{props.hostScore}</div>
       <div className="col-6">
         <StatBar
@@ -164,8 +225,8 @@ function StatRow(props) {
 function StatBar(props) {
   return (
     <div className="row h-100">
-      <div className="p-0 bg-danger stat-bar" style={{width: props.homeAdvantage + '%'}}></div>
-      <div className="col p-0 bg-success"></div>
+      <div className="p-0 bg-primary stat-bar" style={{width: props.homeAdvantage + '%'}}></div>
+      <div className="col p-0 bg-danger"></div>
       <div className="stat-row-info">{props.statName + ` (${props.homeAdvantage}%)`}</div>
     </div>
   );
@@ -173,12 +234,11 @@ function StatBar(props) {
 
 function WinnerStatBar(props) {
   return (
-    <div id="winner-stat-row" className="row">
+    <div id="winner-stat-row" className="row mt-3">
       <div className="col-12">
-        <div className="row h-100">
-          <div className="p-0 bg-danger stat-bar" style={{width: props.homeAdvantage + '%'}}></div>
-          <div className="col p-0 bg-success"></div>
-          <div className="stat-row-info" style={{lineHeight: 3}}>{props.statName + ` (${props.homeAdvantage}%)`}</div>
+        <div className="progress h-100" style={{fontSize: '20px'}}>
+          <div className="progress-bar bg-primary" style={{width: `${props.homeAdvantage}%`}}>{`${props.homeAdvantage}%`}</div>
+          <div className="progress-bar bg-danger" style={{width: `${100 - props.homeAdvantage}%`}}>{`${100 - props.homeAdvantage}%`}</div>
         </div>
       </div>
     </div>
@@ -192,8 +252,8 @@ function TeamInfoColumn(props) {
         <div className="col border">{props.teamName}</div>
       </div>
       <div className="row">
-        <div className="col">
-          <div className="col"><img src={props.teamLogoUrl} alt=""/></div>
+        <div className="col" style={{backgroundColor: `rgba(255, 255, 0, ${(props.winAdvantage < 50 ? 0 : (props.winAdvantage - 50)) / 50})`}}>
+          <div className="col"><img src={props.teamLogoUrl} alt="" style={{height: '390px'}}/></div>
         </div>
       </div>
     </div>
@@ -272,13 +332,17 @@ function calculateWinAdvantage(statistics, gameTime) {
     0 : Math.floor(winnerAdvantage);
 }
 
+function onUpdateButtonClick() {
+  updateRunning = !updateRunning;
+} 
+
 export default App;
 
 
 const testStats = {
   "Shots on Goal": {
-    "home": "1",
-    "away": "4"
+    "home": "2",
+    "away": null
   },
   "Shots off Goal": {
       "home": "9",
